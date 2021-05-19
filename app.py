@@ -22,7 +22,13 @@ def cursor_to_dict(cursor):
 
 
 ## API routes
-@api.route("/users", methods=["GET"])
+@api.errorhandler(404)
+def handle_404(e):
+    # handle all other routes here
+    return api.send_static_file('index.html')
+
+
+@api.route("/api/v1/users", methods=["GET"])
 def api_get_users():
     data = []
     args = {k.lower(): request.args[k] for k in request.args}
@@ -39,19 +45,19 @@ def api_get_users():
     return data
 
 
-@api.route("/users", methods=["POST"])
+@api.route("/api/v1/users", methods=["POST"])
 def api_create_user():
-    print("Create request received")
+    data = None
     try:
         data = request.get_json()
     except:
-        data = {}
-    if len(data) == 0:
-        return json.dumps({"message": "No data provided"}), 400
+        pass
+    if data is None:
+        return "No data provided", 400
 
     name = data.get('name')
     if name is None:
-        return json.dumps({"message": "Request is missing a 'name' value"}), 400
+        return "Request is missing a 'name' value", 400
 
     with sqlite3.connect("database.db") as con:
         cur = con.cursor()
@@ -63,6 +69,51 @@ def api_create_user():
         cur.execute(f"SELECT * FROM USERS WHERE NAME='{name}'")
         data = json.dumps(cursor_to_dict(cur))
     return data
+
+
+@api.route("/api/v1/users", methods=["DELETE"])
+def api_delete_user():
+    args = {k.lower(): request.args[k] for k in request.args}
+    if 'id' in args:
+        with sqlite3.connect("database.db") as con:
+            cur = con.cursor()
+            cur.execute(f"SELECT * FROM USERS WHERE ID={args['id']}")
+            data = cursor_to_dict(cur)
+            if len(data) > 0:
+                cur.execute(f"DELETE FROM USERS WHERE ID={args['id']}")
+                return json.dumps(data)
+            else:
+                return f"No user with id '{args['id']}' found", 400
+    else:
+        return "Request is missing a 'id' parameter", 400
+
+
+@api.route("/api/v1/users", methods=["PATCH"])
+def api_update_user():
+    args = {k.lower(): request.args[k] for k in request.args}
+    if 'id' in args:
+        data = None
+        try:
+            data = request.get_json()
+        except:
+            pass
+        if data is None:
+            return "No data provided to patch", 400
+        name = data.get('name')
+        if name is None:
+            return "Request is missing a 'name' value", 400
+        
+        with sqlite3.connect("database.db") as con:
+            cur = con.cursor()
+            cur.execute(f"SELECT * FROM USERS WHERE ID={args['id']}")
+            data = cursor_to_dict(cur)
+            if len(data) > 0:
+                cur.execute(f"UPDATE USERS SET NAME='{name}' WHERE ID={args['id']}")
+                return json.dumps(data)
+            else:
+                return f"No user with id '{args['id']}' found", 400
+    else:
+        return "Request is missing a 'id' parameter", 400
 
 
 if __name__ == '__main__':
